@@ -21,6 +21,48 @@ const BASE_URL = "http://127.0.0.1:9/v1";
 
 test.use({ e2eDaemonEnvironment: { OPENAI_API_KEY: ENV_API_KEY } });
 
+test("switches MAI voice without replacing the existing speech pipeline", async ({
+  page,
+  e2eWorkerClient,
+}) => {
+  try {
+    await openVoiceSettings(page);
+    const backend = page.getByRole("switch", { name: "MAI Voice (preview)", exact: true });
+    await expect(backend).not.toBeChecked();
+    await backend.click();
+    await expect(backend).toBeChecked();
+    await expect(page.getByTestId("voice-site-voiceMode.stt")).toHaveCount(0);
+    expect((await e2eWorkerClient.getDaemonConfig()).config.features?.voiceMode.backend).toBe(
+      "mai",
+    );
+    await backend.click();
+    await expect(backend).not.toBeChecked();
+    await expectSpeechSiteSummary(page, "Listening", "OpenAI · whisper-1");
+  } finally {
+    await e2eWorkerClient.patchDaemonConfig({ features: { voiceMode: { backend: "pipeline" } } });
+  }
+});
+
+test("keeps a failed MAI backend save visible and allows retry", async ({
+  page,
+  e2eWorkerClient,
+}) => {
+  try {
+    await openVoiceSettings(page);
+    const backend = page.getByRole("switch", { name: "MAI Voice (preview)", exact: true });
+    await withUnwritableDaemonConfig(async () => {
+      await backend.click();
+      await expect(page.getByText(/^Unable to update voice settings: /)).toBeVisible();
+    });
+    await expect(backend).not.toBeChecked();
+    await backend.click();
+    await expect(backend).toBeChecked();
+    await expect(page.getByText(/^Unable to update voice settings: /)).toHaveCount(0);
+  } finally {
+    await e2eWorkerClient.patchDaemonConfig({ features: { voiceMode: { backend: "pipeline" } } });
+  }
+});
+
 test("configures an env-pinned OpenAI site and keeps the saved key on later saves", async ({
   page,
 }) => {

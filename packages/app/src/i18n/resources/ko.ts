@@ -2354,6 +2354,7 @@ export const ko: TranslationResources = {
         enabledHint: "입력하는 대신 메시지 상자에 말하세요",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "음성 모드",
         info: "음성 모드는 말한 내용을 텍스트로 옮기고 에이전트의 답변을 소리 내어 읽어 줍니다.",
         enabled: "음성 모드",

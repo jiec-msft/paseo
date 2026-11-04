@@ -2379,6 +2379,7 @@ export const ru: TranslationResources = {
         enabledHint: "Говорите в поле сообщения вместо набора текста",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "Голосовой режим",
         info: "Голосовой режим расшифровывает вашу речь и зачитывает ответы агента вслух.",
         enabled: "Голосовой режим",

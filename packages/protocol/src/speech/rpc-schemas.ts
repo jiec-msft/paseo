@@ -35,6 +35,8 @@ export const SpeechSettingsSchema = z
     voiceMode: z
       .object({
         enabled: z.boolean(),
+        backend: z.string().optional(),
+        supportedBackends: z.array(z.string()).optional(),
         stt: SpeechSttSettingsSchema,
         tts: SpeechTtsSettingsSchema,
         llm: z
@@ -110,6 +112,7 @@ export const SpeechSettingsPatchSchema = z
     voiceMode: z
       .object({
         enabled: z.boolean().nullable().optional(),
+        backend: z.string().nullable().optional(),
         stt: SpeechSttSettingsPatchSchema.optional(),
         tts: SpeechTtsSettingsPatchSchema.optional(),
         llm: z

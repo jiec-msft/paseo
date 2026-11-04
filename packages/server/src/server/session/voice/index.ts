@@ -1,6 +1,7 @@
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import type { OwnedOperation, SessionDelivery } from "../owned-subscriptions/index.js";
 import { VoiceSession, type VoiceSessionOptions } from "./voice-session.js";
+import type { AgentStreamEvent } from "../../agent/agent-sdk-types.js";
 
 type VoiceMessage = Extract<
   SessionInboundMessage,
@@ -42,6 +43,18 @@ export class VoiceSessions {
     return [...this.sources.values()].some(
       (source) => !source.closing && source.voice.isActiveForAgent(agentId),
     );
+  }
+
+  isPipelineActiveForAgent(agentId: string): boolean {
+    return [...this.sources.values()].some(
+      (source) => !source.closing && source.voice.isPipelineActiveForAgent(agentId),
+    );
+  }
+
+  handleAgentEvent(agentId: string, event: AgentStreamEvent): void {
+    for (const source of this.sources.values()) {
+      if (!source.closing) source.voice.handleAgentEvent(agentId, event);
+    }
   }
 
   handleMessage(message: VoiceMessage): Promise<void> {

@@ -2392,6 +2392,7 @@ export const es: TranslationResources = {
         enabledHint: "Habla en el cuadro de mensaje en lugar de escribir",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "Modo de voz",
         info: "El modo de voz transcribe lo que dices y lee en voz alta las respuestas del agente.",
         enabled: "Modo de voz",

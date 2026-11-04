@@ -16,6 +16,24 @@ import { loadPersistedConfig } from "./persisted-config.js";
 const roots: string[] = [];
 
 describe("server config", () => {
+  test("keeps the MAI endpoint in configuration snapshots without retaining its token", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mai-config-"));
+    roots.push(home);
+    const config = loadConfig(home, {
+      env: {
+        PASEO_VOICE_MODE_ENABLED: "true",
+        PASEO_VOICE_BACKEND: "mai",
+        PASEO_MAI_VOICE_URL: "wss://voice.example.test/realtime/voice",
+        PASEO_MAI_VOICE_TOKEN: "synthetic-token",
+      },
+    });
+    expect(config.speech?.maiVoice).toEqual({ enabled: true, endpointConfigured: true });
+    expect(config.configReload?.env?.PASEO_MAI_VOICE_URL).toBe(
+      "wss://voice.example.test/realtime/voice",
+    );
+    expect(config.configReload?.env?.PASEO_MAI_VOICE_TOKEN).toBeUndefined();
+  });
+
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });

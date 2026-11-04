@@ -1373,6 +1373,25 @@ describe("DaemonConfigStore speech settings", () => {
     return { paseoHome, store, applied, persisted };
   }
 
+  test("switches the voice backend without replacing pipeline settings or dictation", async () => {
+    const { store, paseoHome } = createSpeechStore({
+      features: { voiceMode: { stt: { provider: "openai", apiKey: "retained-key" } } },
+    });
+    await store.patch({ features: { voiceMode: { enabled: true, backend: "mai" } } });
+    expect(store.get().features?.voiceMode).toMatchObject({
+      enabled: true,
+      backend: "mai",
+      supportedBackends: ["pipeline", "mai"],
+    });
+    await store.patch({ features: { voiceMode: { backend: "pipeline" } } });
+    expect(loadPersistedConfig(paseoHome).features?.voiceMode?.stt).toEqual({
+      provider: "openai",
+      apiKey: "retained-key",
+    });
+    expect(store.get().features?.dictation.enabled).toBe(true);
+    expect(JSON.stringify(store.get())).not.toContain("retained-key");
+  });
+
   test("reads, patches, and clears local STT language without losing it on other saves", async () => {
     const { paseoHome, store } = createSpeechStore({
       features: { dictation: { stt: { language: "fr" } } },

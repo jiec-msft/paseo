@@ -17,7 +17,8 @@ import { createVoiceTurnController, type VoiceTurnController } from "./voice-tur
 import { buildVoiceModeSystemPrompt, stripVoiceModeSystemPrompt } from "../../voice-config.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
-import type { AgentSessionConfig } from "../../agent/agent-sdk-types.js";
+import type { AgentSessionConfig, AgentStreamEvent } from "../../agent/agent-sdk-types.js";
+import { getMaiVoiceToken, MaiVoiceSession } from "./mai-voice.js";
 import type { LocalSpeechModelId } from "../../speech/providers/local/models.js";
 import { toResolver, type Resolvable } from "../../speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot, SpeechReadinessState } from "../../speech/speech-runtime.js";
@@ -126,7 +127,11 @@ export interface VoiceSessionHost {
     agentId: string,
     overrides: Partial<AgentSessionConfig>,
   ): Promise<ManagedAgent>;
-  sendSpokenInput(agentId: string, text: string): Promise<void>;
+  sendSpokenInput(
+    agentId: string,
+    text: string,
+    options?: { preservePermissions: boolean },
+  ): Promise<void>;
   interruptAgentIfRunning(agentId: string): Promise<void>;
   hasActiveAgentRun(agentId: string | null): boolean;
 }
@@ -137,6 +142,7 @@ export interface VoiceSessionOptions {
   sessionId: string;
   onIdle?: () => void;
   sttLanguage?: string;
+  getVoiceBackend?: () => string;
   tts: Resolvable<TextToSpeechProvider | null>;
   stt: Resolvable<SpeechToTextProvider | null>;
   voice?: {
@@ -209,6 +215,8 @@ export class VoiceSession {
 
   private voiceModeAgentId: string | null = null;
   private voiceModeBaseConfig: VoiceModeBaseConfig | null = null;
+  private maiVoice: MaiVoiceSession | null = null;
+  private readonly getVoiceBackend: () => string;
 
   constructor(options: VoiceSessionOptions) {
     const { host, logger, sessionId, sttLanguage, tts, stt, voice, voiceBridge, dictation } =
@@ -218,6 +226,7 @@ export class VoiceSession {
     this.sessionLogger = logger;
     this.sessionId = sessionId;
     this.sttLanguage = sttLanguage ?? "en";
+    this.getVoiceBackend = options.getVoiceBackend ?? (() => "pipeline");
     this.abortController = new AbortController();
 
     this.resolveVoiceTurnDetection = toResolver(voice?.turnDetection ?? null);
@@ -254,6 +263,14 @@ export class VoiceSession {
 
   isActiveForAgent(agentId: string): boolean {
     return this.isVoiceMode && this.voiceModeAgentId === agentId;
+  }
+
+  isPipelineActiveForAgent(agentId: string): boolean {
+    return this.isActiveForAgent(agentId) && this.maiVoice === null;
+  }
+
+  handleAgentEvent(agentId: string, event: AgentStreamEvent): void {
+    if (this.isActiveForAgent(agentId)) this.maiVoice?.handleAgentEvent(event);
   }
 
   handleDictationChunk(params: {
@@ -359,6 +376,8 @@ export class VoiceSession {
         "set_voice_mode started",
       );
       if (enabled) {
+        if (await this.tryEnableMaiVoice({ agentId, requestId })) return;
+        await this.resetMaiVoice();
         const unavailable = this.resolveVoiceFeatureUnavailableContext("voice_mode");
         if (unavailable) {
           throw new VoiceFeatureUnavailableError(unavailable);
@@ -488,6 +507,86 @@ export class VoiceSession {
     return parsed.data;
   }
 
+  private async tryEnableMaiVoice(params: {
+    agentId?: string;
+    requestId?: string;
+  }): Promise<boolean> {
+    if (this.getVoiceBackend() !== "mai") return false;
+    await this.enableMaiVoice(params.agentId ?? "");
+    if (params.requestId) {
+      this.emit({
+        type: "set_voice_mode_response",
+        payload: {
+          requestId: params.requestId,
+          enabled: true,
+          agentId: this.voiceModeAgentId,
+          accepted: true,
+          error: null,
+        },
+      });
+    }
+    return true;
+  }
+
+  private async resetMaiVoice(): Promise<void> {
+    if (!this.maiVoice) return;
+    await this.disableVoiceModeForActiveAgent(true);
+    this.isVoiceMode = false;
+  }
+
+  private async enableMaiVoice(rawAgentId: string): Promise<void> {
+    const agentId = this.parseVoiceTargetAgentId(rawAgentId, "set_voice_mode");
+    if (this.maiVoice && this.isActiveForAgent(agentId)) return;
+    await this.disableVoiceModeForActiveAgent(true);
+    this.isVoiceMode = false;
+    const readiness = this.resolveVoiceFeatureUnavailableContext("voice_mode");
+    if (readiness) throw new VoiceFeatureUnavailableError(readiness);
+    const agent = await this.host.loadAgent(agentId);
+    const token = await getMaiVoiceToken();
+    if (this.closed) throw new Error("Voice source is closed");
+    const url = process.env.PASEO_MAI_VOICE_URL;
+    if (!url)
+      throw new Error("Set PASEO_MAI_VOICE_URL on the daemon host before starting MAI voice.");
+    const voice = new MaiVoiceSession({
+      url,
+      token,
+      agentId,
+      label: agent.config.provider,
+      language: process.env.PASEO_MAI_VOICE_LANGUAGE ?? "zh-CN",
+      pendingPermissionIds: [...agent.pendingPermissions.keys()],
+      emit: (message) => this.emit(message),
+      sendTask: (text) => this.host.sendSpokenInput(agentId, text, { preservePermissions: true }),
+      onError: (error) => {
+        this.sessionLogger.warn({ message: error.message }, "MAI voice session failed");
+        this.isVoiceMode = false;
+        this.voiceModeAgentId = null;
+        this.maiVoice = null;
+        this.emit({
+          type: "activity_log",
+          payload: {
+            id: uuidv4(),
+            timestamp: new Date(),
+            type: "error",
+            content: error.message,
+            metadata: { voiceSessionFailed: true },
+          },
+        });
+        this.onIdle?.();
+      },
+    });
+    this.maiVoice = voice;
+    try {
+      await voice.connect();
+      if (this.closed) throw new Error("Voice source is closed");
+      this.voiceModeAgentId = agentId;
+      this.isVoiceMode = true;
+    } catch (error) {
+      voice.close();
+      this.maiVoice = null;
+      throw error;
+    }
+  }
+
   private async enableVoiceModeForAgent(agentId: string): Promise<string> {
     const startedAt = Date.now();
     this.sessionLogger.info({ agentId }, "enableVoiceModeForAgent.ensureAgentLoaded.start");
@@ -528,6 +627,8 @@ export class VoiceSession {
   }
 
   private async disableVoiceModeForActiveAgent(restoreAgentConfig: boolean): Promise<void> {
+    this.maiVoice?.close();
+    this.maiVoice = null;
     await this.stopVoiceTurnController();
 
     const agentId = this.voiceModeAgentId;
@@ -726,6 +827,10 @@ export class VoiceSession {
     msg: Extract<SessionInboundMessage, { type: "voice_audio_chunk" }>,
     chunkFormat: string,
   ): Promise<void> {
+    if (this.maiVoice) {
+      this.maiVoice.appendAudio(msg.audio, chunkFormat);
+      return;
+    }
     if (!this.voiceTurnController) {
       throw new Error("Voice mode is enabled but the voice turn controller is not running");
     }
@@ -1140,6 +1245,7 @@ export class VoiceSession {
    * Handle audio playback confirmation from client
    */
   handleAudioPlayed(id: string): void {
+    this.maiVoice?.audioPlayed(id);
     this.ttsManager.confirmAudioPlayed(id);
   }
 
@@ -1319,6 +1425,8 @@ export class VoiceSession {
   cancel(): void {
     if (this.closed) return;
     this.closed = true;
+    this.maiVoice?.close();
+    this.maiVoice = null;
     this.abortController.abort();
     this.clearBufferTimeout();
     this.pendingAudioSegments = [];

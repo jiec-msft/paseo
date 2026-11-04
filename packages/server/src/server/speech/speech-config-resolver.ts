@@ -57,6 +57,22 @@ interface FeatureProviderInputs {
   enabled: boolean;
 }
 
+export function resolveVoiceModeConfig(params: {
+  env: NodeJS.ProcessEnv;
+  persisted: PersistedConfig;
+}) {
+  const backend = z
+    .enum(["pipeline", "mai"])
+    .parse(
+      params.env.PASEO_VOICE_BACKEND ?? params.persisted.features?.voiceMode?.backend ?? "pipeline",
+    );
+  const enabled = resolveOptionalBooleanFlag(
+    params.env.PASEO_VOICE_MODE_ENABLED ?? params.persisted.features?.voiceMode?.enabled,
+    VOICE_MODE_ENABLED_BY_DEFAULT,
+  );
+  return { backend, enabled };
+}
+
 function firstSpeechDefinedValue<T>(values: Array<T | null | undefined>): T | undefined {
   for (const value of values) {
     if (value !== undefined && value !== null) {
@@ -70,13 +86,8 @@ function buildFeatureProviderInputs(params: {
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
 }): Record<keyof RequestedSpeechProviders, FeatureProviderInputs> {
-  const voiceModeEnabled = resolveOptionalBooleanFlag(
-    firstSpeechDefinedValue<string | boolean>([
-      params.env.PASEO_VOICE_MODE_ENABLED,
-      params.persisted.features?.voiceMode?.enabled,
-    ]),
-    VOICE_MODE_ENABLED_BY_DEFAULT,
-  );
+  const voiceMode = resolveVoiceModeConfig(params);
+  const voiceModeEnabled = voiceMode.enabled && voiceMode.backend === "pipeline";
   return {
     dictationStt: {
       configuredValue: firstSpeechDefinedValue<string>([
@@ -180,6 +191,14 @@ export function resolveSpeechConfig(params: {
     openai,
     speech: {
       providers,
+      ...(resolveVoiceModeConfig(params).backend === "mai"
+        ? {
+            maiVoice: {
+              enabled: resolveVoiceModeConfig(params).enabled,
+              endpointConfigured: Boolean(params.env.PASEO_MAI_VOICE_URL?.trim()),
+            },
+          }
+        : {}),
       localModelsDir: local.modelsDir,
       sttLanguages: local.sttLanguages,
       ...(local.local ? { local: local.local } : {}),

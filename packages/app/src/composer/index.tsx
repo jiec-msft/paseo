@@ -2440,6 +2440,11 @@ function ComposerContentImpl({
           <View style={inputAreaContentStyle}>
             {isFullscreen ? null : queueList}
             {!isFullscreen && sendErrorNode}
+            {voice?.error ? (
+              <Text accessibilityRole="alert" style={styles.sendErrorText}>
+                {voice.error}
+              </Text>
+            ) : null}
 
             <ComposerAutocompleteBinding
               text={textSource}

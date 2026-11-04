@@ -2379,6 +2379,7 @@ export const ar: TranslationResources = {
         enabledHint: "تحدّث في مربع الرسالة بدلًا من الكتابة",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "وضع الصوت",
         info: "يحوّل وضع الصوت كلامك إلى نص ويقرأ ردود الوكيل بصوت عالٍ.",
         enabled: "وضع الصوت",

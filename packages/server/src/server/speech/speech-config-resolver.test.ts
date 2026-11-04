@@ -6,6 +6,20 @@ import { PersistedConfigSchema } from "../persisted-config.js";
 import { resolveSpeechConfig } from "./speech-config-resolver.js";
 
 describe("resolveSpeechConfig", () => {
+  test("MAI voice does not activate pipeline models or change dictation", () => {
+    const persisted = PersistedConfigSchema.parse({
+      features: { dictation: { enabled: false }, voiceMode: { enabled: true, backend: "mai" } },
+    });
+    const result = resolveSpeechConfig({ paseoHome: "/tmp/mai-voice", env: {}, persisted });
+    expect(result.speech.maiVoice).toEqual({ enabled: true, endpointConfigured: false });
+    expect(Object.values(result.speech.providers).map((provider) => provider.enabled)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
   test("resolves local-first defaults with voice mode off until turned on", () => {
     const paseoHome = "/tmp/paseo-home";
     const persisted = PersistedConfigSchema.parse({});

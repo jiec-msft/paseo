@@ -251,6 +251,31 @@ describe("createSpeechService settings changes", () => {
     initializeLocalSpeechServicesMock.mockReset();
   });
 
+  it("runs MAI without pipeline models and reports missing endpoint configuration", async () => {
+    initializeLocalSpeechServicesMock.mockResolvedValue(
+      localSpeech({ dictationStt: null, defaultModelIds: [] }),
+    );
+    const runtime = createSpeechService({
+      logger: pino({ level: "silent" }),
+      speechConfig: { ...nothingEnabled, maiVoice: { enabled: true, endpointConfigured: true } },
+    });
+    runtime.start();
+    await runtime.ready;
+    expect(runtime.getReadiness().realtimeVoice).toMatchObject({ enabled: true, available: true });
+    expect(runtime.getReadiness().requiredLocalModelIds).toEqual([]);
+    runtime.reconfigure({
+      speechConfig: { ...nothingEnabled, maiVoice: { enabled: true, endpointConfigured: false } },
+    });
+    await vi.waitFor(() =>
+      expect(runtime.getReadiness().realtimeVoice).toMatchObject({
+        enabled: true,
+        available: false,
+        message: expect.stringContaining("PASEO_MAI_VOICE_URL"),
+      }),
+    );
+    await runtime.stop();
+  });
+
   it("applies new providers without a restart", async () => {
     initializeLocalSpeechServicesMock.mockResolvedValue(
       localSpeech({ dictationStt: createStubStt("dictation-local"), defaultModelIds: [] }),
