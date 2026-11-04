@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function createHarness(
-  options: { initialize?: boolean; pendingPermissionIds?: string[] } = {},
+  options: { initialize?: boolean; pendingPermissionIds?: string[]; url?: string } = {},
 ) {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   await once(server, "listening");
@@ -37,7 +37,7 @@ async function createHarness(
     });
   });
   const session = new MaiVoiceSession({
-    url: `ws://127.0.0.1:${address.port}`,
+    url: options.url ?? `ws://127.0.0.1:${address.port}`,
     token: "test-credential",
     agentId: "selected-agent",
     label: "Test agent",
@@ -66,6 +66,13 @@ async function createHarness(
 }
 
 describe("MAI voice transport", () => {
+  test("does not include a malformed endpoint in its error", async () => {
+    const h = await createHarness({ url: "not-a-url synthetic-secret" });
+    await expect(h.session.connect()).rejects.toMatchObject({
+      message: "PASEO_MAI_VOICE_URL must be a valid WebSocket URL.",
+    });
+  });
+
   test("answers session inspection without running another agent task", async () => {
     const h = await createHarness();
     await h.session.connect();
@@ -253,6 +260,30 @@ describe("MAI voice transport", () => {
       pending_id: "permission-1",
       confirmation_type: "tool",
     });
+    expect(h.tasks).toEqual([]);
+  });
+
+  test("keeps queued approvals scoped and skips a resolved pending narration", async () => {
+    const h = await createHarness();
+    await h.session.connect();
+    for (const id of ["first", "second"]) {
+      h.session.handleAgentEvent({
+        type: "permission_requested",
+        provider: "copilot",
+        request: { id, provider: "copilot", kind: "tool", name: "write_file" },
+      });
+    }
+    const first = await h.message("request_narration");
+    expect(first.pending_id).toBe("first");
+    h.session.handleAgentEvent({
+      type: "permission_resolved",
+      provider: "copilot",
+      requestId: "first",
+      resolution: { behavior: "deny" },
+    });
+    h.send({ type: "narration_ack", narration_id: first.narration_id, disposition: "suppressed" });
+    expect(await h.message("request_narration", 2)).toMatchObject({ pending_id: "second" });
+    expect(h.errors).toEqual([]);
     expect(h.tasks).toEqual([]);
   });
 

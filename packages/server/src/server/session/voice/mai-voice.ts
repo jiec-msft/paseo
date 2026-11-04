@@ -109,11 +109,16 @@ export class MaiVoiceSession {
   }
 
   private get pending(): PendingApproval | null {
-    return [...this.pendingApprovals.values()].at(-1) ?? null;
+    return this.pendingApprovals.values().next().value ?? null;
   }
 
   async connect(): Promise<void> {
-    const url = new URL(this.options.url);
+    let url: URL;
+    try {
+      url = new URL(this.options.url);
+    } catch {
+      throw new Error("PASEO_MAI_VOICE_URL must be a valid WebSocket URL.");
+    }
     const localTestSocket = url.protocol === "ws:" && url.hostname === "127.0.0.1";
     if (
       (!localTestSocket && url.protocol !== "wss:") ||
@@ -242,6 +247,7 @@ export class MaiVoiceSession {
         this.pendingApprovals.delete(event.requestId);
         this.agentState = this.pendingApprovals.size > 0 ? "waiting_for_confirmation" : "thinking";
         this.syncContext();
+        this.flushNarration();
         break;
       case "turn_completed":
         this.agentState = "idle";
@@ -509,15 +515,18 @@ export class MaiVoiceSession {
 
   private flushNarration(): void {
     if (this.closed || this.playback || this.narrationInFlight) return;
-    let narration = this.narrations.shift();
+    let narration = this.narrations[0];
     while (narration?.pendingId && !this.pendingApprovals.has(narration.pendingId)) {
-      narration = this.narrations.shift();
+      this.narrations.shift();
+      narration = this.narrations[0];
     }
     if (!narration) {
       if (this.outputTimer) clearTimeout(this.outputTimer);
       this.outputTimer = null;
       return;
     }
+    if (narration.pendingId && narration.pendingId !== this.pending?.pending_id) return;
+    this.narrations.shift();
     this.narrationInFlight = narration;
     this.watchOutput();
     this.send({
