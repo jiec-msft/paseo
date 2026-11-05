@@ -8,6 +8,7 @@ import type { SessionOutboundMessage } from "../../messages.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_REPLY_LENGTH = 6000;
+export const MAI_AUDIO_ID_PREFIX = "mai:";
 const EventSchema = z.looseObject({
   type: z.string(),
   call_id: z.string().nullish(),
@@ -438,7 +439,7 @@ export class MaiVoiceSession {
       };
     }
     const playback = this.playback;
-    const id = randomUUID();
+    const id = `${MAI_AUDIO_ID_PREFIX}${randomUUID()}`;
     if (event.is_final) playback.finalChunkId = id;
     this.options.emit({
       type: "audio_output",

@@ -18,7 +18,7 @@ import { buildVoiceModeSystemPrompt, stripVoiceModeSystemPrompt } from "../../vo
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { AgentSessionConfig, AgentStreamEvent } from "../../agent/agent-sdk-types.js";
-import { getMaiVoiceToken, MaiVoiceSession } from "./mai-voice.js";
+import { getMaiVoiceToken, MAI_AUDIO_ID_PREFIX, MaiVoiceSession } from "./mai-voice.js";
 import type { LocalSpeechModelId } from "../../speech/providers/local/models.js";
 import { toResolver, type Resolvable } from "../../speech/provider-resolver.js";
 import type { SpeechReadinessSnapshot, SpeechReadinessState } from "../../speech/speech-runtime.js";
@@ -1245,7 +1245,11 @@ export class VoiceSession {
    * Handle audio playback confirmation from client
    */
   handleAudioPlayed(id: string): void {
-    this.maiVoice?.audioPlayed(id);
+    // Keep delayed MAI confirmations out of the pipeline after a backend switch.
+    if (id.startsWith(MAI_AUDIO_ID_PREFIX)) {
+      this.maiVoice?.audioPlayed(id);
+      return;
+    }
     this.ttsManager.confirmAudioPlayed(id);
   }
 

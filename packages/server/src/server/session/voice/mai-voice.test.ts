@@ -188,6 +188,11 @@ describe("MAI voice transport", () => {
       expect.objectContaining({ audio: "BBBB", format: "wav", chunkIndex: 1, isLastChunk: true }),
     ]);
     expect(outputs[0].payload.groupId).toBe(outputs[1].payload.groupId);
+    expect(outputs.map((message) => message.payload.id)).toEqual([
+      expect.stringMatching(/^mai:[0-9a-f-]{36}$/),
+      expect.stringMatching(/^mai:[0-9a-f-]{36}$/),
+    ]);
+    expect(outputs[0].payload.id).not.toBe(outputs[1].payload.id);
     h.session.appendAudio("feedback", PCM_FORMAT);
     expect(h.received.filter((frame) => frame.type === "ptt_audio_chunk")).toEqual([]);
     h.session.audioPlayed(outputs[0].payload.id);
