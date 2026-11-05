@@ -26,6 +26,7 @@ interface VoiceContextValue extends VoiceRuntimeSnapshot {
 }
 
 const EMPTY_SNAPSHOT: VoiceRuntimeSnapshot = {
+  error: null,
   phase: "disabled",
   isVoiceMode: false,
   isVoiceSwitching: false,

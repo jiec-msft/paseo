@@ -2366,6 +2366,7 @@ export const ja: TranslationResources = {
         enabledHint: "入力する代わりにメッセージ欄に話しかけます",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "ボイスモード",
         info: "ボイスモードは話した内容を文字起こしし、エージェントの返答を読み上げます。",
         enabled: "ボイスモード",

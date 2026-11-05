@@ -36,6 +36,8 @@ interface OpenSheet {
   openCount: number;
 }
 
+type BackendSave = { status: "idle" } | { status: "saving" } | { status: "failed"; error: string };
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -49,6 +51,7 @@ export function HostVoicePage({ serverId }: { serverId: string }) {
   const localModels = useLocalSpeechModels(serverId);
   const { refresh: refreshModels } = localModels;
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
+  const [backendSave, setBackendSave] = useState<BackendSave>({ status: "idle" });
 
   // Selecting a model changes which models are in use, so the catalog is re-read after a save.
   const save = useCallback<SavePatch>(
@@ -73,6 +76,20 @@ export function HostVoicePage({ serverId }: { serverId: string }) {
   const setVoiceModeEnabled = useCallback(
     (enabled: boolean) => saveSwitch({ voiceMode: { enabled } }),
     [saveSwitch],
+  );
+  const setMaiVoiceEnabled = useCallback(
+    (enabled: boolean) => {
+      setBackendSave({ status: "saving" });
+      void save({ voiceMode: { backend: enabled ? "mai" : "pipeline" } }).then(
+        () => setBackendSave({ status: "idle" }),
+        (error: unknown) =>
+          setBackendSave({
+            status: "failed",
+            error: `${t("settings.voice.saveError")}: ${errorMessage(error)}`,
+          }),
+      );
+    },
+    [save, t],
   );
   const openSheet = useCallback((siteId: SpeechSiteId) => {
     setSheet((current) => ({
@@ -143,9 +160,26 @@ export function HostVoicePage({ serverId }: { serverId: string }) {
             value={features.voiceMode.enabled}
             onChange={setVoiceModeEnabled}
           />
-          {siteRow("voiceMode.stt", t("settings.voice.sites.voiceModeStt"))}
-          {siteRow("voiceMode.tts", t("settings.voice.sites.voiceModeTts"))}
+          {features.voiceMode.supportedBackends?.includes("mai") ? (
+            <FeatureSwitchRow
+              label={t("settings.voice.voiceMode.mai")}
+              hint={t("settings.voice.voiceMode.maiHint")}
+              envVar={envOverrides["features.voiceMode.backend"]}
+              value={features.voiceMode.backend === "mai"}
+              onChange={setMaiVoiceEnabled}
+              saving={backendSave.status === "saving"}
+            />
+          ) : null}
+          {features.voiceMode.backend !== "mai" ? (
+            <>
+              {siteRow("voiceMode.stt", t("settings.voice.sites.voiceModeStt"))}
+              {siteRow("voiceMode.tts", t("settings.voice.sites.voiceModeTts"))}
+            </>
+          ) : null}
         </SettingsCard>
+        {backendSave.status === "failed" ? (
+          <Alert size="md" variant="error" title={backendSave.error} />
+        ) : null}
       </SettingsSection>
       {sheet && sheetSite && sheetSite.provider !== "unknown" ? (
         <SpeechProviderSheet
@@ -182,22 +216,28 @@ function FeatureSwitchRow({
   envVar,
   value,
   onChange,
+  saving = false,
 }: {
   label: string;
   hint: string;
   envVar: string | undefined;
   value: boolean;
   onChange: (value: boolean) => void;
+  saving?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <SettingsRow label={label} hint={envVar ? t("settings.voice.setBy", { name: envVar }) : hint}>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        disabled={Boolean(envVar)}
-        accessibilityLabel={label}
-      />
+      {saving ? (
+        <LoadingSpinner color={styles.spinnerColor.color} />
+      ) : (
+        <Switch
+          value={value}
+          onValueChange={onChange}
+          disabled={Boolean(envVar)}
+          accessibilityLabel={label}
+        />
+      )}
     </SettingsRow>
   );
 }

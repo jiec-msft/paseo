@@ -386,6 +386,7 @@ export interface PaseoSpeechSttLanguages {
 
 export interface PaseoSpeechConfig {
   providers: RequestedSpeechProviders;
+  maiVoice?: { enabled: boolean; endpointConfigured: boolean };
   // Where local models live, whether or not a feature currently uses the local provider.
   localModelsDir: string;
   sttLanguages?: PaseoSpeechSttLanguages;

@@ -1273,22 +1273,34 @@ export class Session {
             }),
           reloadAgentSession: (agentId, overrides) =>
             this.agentManager.reloadAgentSession(agentId, overrides),
-          sendSpokenInput: async (agentId, text) => {
-            await this.handleSendAgentMessage(
+          sendSpokenInput: async (agentId, text, voiceOptions) => {
+            if (
+              voiceOptions?.preservePermissions &&
+              this.agentManager.getPendingPermissions(agentId).length > 0
+            ) {
+              throw new Error("Use Paseo approval buttons before sending another voice task.");
+            }
+            const result = await this.handleSendAgentMessage(
               agentId,
               text,
               undefined,
               undefined,
               undefined,
               undefined,
-              { spokenInput: true },
+              {
+                spokenInput: !voiceOptions?.preservePermissions,
+                preservePermissions: voiceOptions?.preservePermissions,
+              },
             );
+            if (!result.ok) throw new Error(result.error);
           },
           interruptAgentIfRunning: (agentId) => this.interruptAgentIfRunning(agentId),
           hasActiveAgentRun: (agentId) => this.hasActiveAgentRun(agentId),
         },
         logger: this.sessionLogger,
         sessionId: this.sessionId,
+        getVoiceBackend: () =>
+          this.daemonConfigStore.get().features?.voiceMode.backend ?? "pipeline",
         sttLanguage,
         tts,
         stt,
@@ -2049,8 +2061,10 @@ export class Session {
           return;
         }
 
+        this.voiceSessions.handleAgentEvent(event.agentId, event.event);
+
         if (
-          this.voiceSessions.isActiveForAgent(event.agentId) &&
+          this.voiceSessions.isPipelineActiveForAgent(event.agentId) &&
           event.event.type === "permission_requested" &&
           isVoicePermissionAllowed(event.event.request)
         ) {
@@ -4159,7 +4173,7 @@ export class Session {
     images?: Array<{ data: string; mimeType: string }>,
     attachments?: AgentAttachment[],
     runOptions?: AgentRunOptions,
-    options?: { spokenInput?: boolean },
+    options?: { spokenInput?: boolean; preservePermissions?: boolean },
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     this.sessionLogger.info(
       {
@@ -4188,9 +4202,9 @@ export class Session {
         prompt,
         messageId,
         runOptions,
-        // A typed or spoken message from the human answers any permission the
-        // agent is blocked on.
-        clearPendingPermissions: true,
+        // MAI task delegation cannot answer a pending approval. The existing
+        // manual input path keeps its permission-clearing behavior.
+        clearPendingPermissions: !options?.preservePermissions,
         logger: this.sessionLogger,
       });
       return { ok: true };

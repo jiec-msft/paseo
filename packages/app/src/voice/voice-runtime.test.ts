@@ -82,6 +82,43 @@ function createRuntime(options?: {
 }
 
 describe("voice runtime", () => {
+  it("acknowledges empty final WAV markers without decoding them as audio", async () => {
+    const adapter = createSessionAdapter();
+    const { runtime, engine } = createRuntime();
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    runtime.handleAudioOutput("server-1", {
+      audio: "",
+      format: "wav",
+      id: "final",
+      groupId: "reply",
+      chunkIndex: 0,
+      isLastChunk: true,
+      isVoiceMode: true,
+    });
+    await vi.waitFor(() => expect(adapter.audioPlayed).toHaveBeenCalledWith("final"));
+    expect(engine.play).not.toHaveBeenCalled();
+    await runtime.destroy();
+  });
+
+  it("stops microphone and playback after a hosted failure and retains the error until retry", async () => {
+    const adapter = createSessionAdapter();
+    const { runtime, engine } = createRuntime();
+    runtime.registerSession(adapter);
+    await runtime.startVoice("server-1", "agent-1");
+    await runtime.onSessionFailure("server-1", "MAI voice disconnected. Retry.");
+    expect(engine.stopCapture).toHaveBeenCalled();
+    expect(engine.clearQueue).toHaveBeenCalled();
+    expect(runtime.getSnapshot()).toMatchObject({
+      isVoiceMode: false,
+      phase: "disabled",
+      error: "MAI voice disconnected. Retry.",
+    });
+    await runtime.startVoice("server-1", "agent-1");
+    expect(runtime.getSnapshot()).toMatchObject({ phase: "listening", error: null });
+    await runtime.destroy();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

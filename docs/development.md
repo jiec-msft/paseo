@@ -29,6 +29,27 @@ the titlebar row. Production builds leave the variable unset and show no label.
 
 `npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:6767` for the packaged app and production-style `~/.paseo` state.
 
+### MAI Voice preview
+
+在 **Settings > 当前主机 > Voice** 开启 Voice mode，再开启 **MAI Voice (preview)**。
+关闭 MAI 开关即可回到原有的 STT/TTS pipeline；原有 provider 配置和 Dictation 不会被覆盖。
+切换 backend 后，停止并重新开启当前语音会话。
+
+daemon 所在的机器需要设置 `PASEO_MAI_VOICE_URL`，值是获准使用的 MAI Voice WebSocket
+endpoint（`wss://`，不带 token 或 query）。认证默认读取该机器的 `gh auth login`；
+也可通过进程环境提供 `PASEO_MAI_VOICE_TOKEN`。不要把 token 放进配置文件、浏览器、安装包、
+日志或 CI artifact。默认语音语言是 `zh-CN`，可用 `PASEO_MAI_VOICE_LANGUAGE` 调整。
+该功能不保证任意 GitHub token 都拥有服务访问权限。
+
+这条路径通过 daemon 转发音频、任务和播报，不需要本地 speech models，也不创建新的
+coding agent 或更换模型。只发送当前选中 agent 的上下文；工具执行和审批仍由 Paseo
+及其原有 agent harness 管理。语音不能批准权限、切换模型或选择其他 agent。
+
+预览版采用轮流说话：播报期间暂停上行音频，避免扬声器回声被当作新指令。需要停止声音时关闭
+Voice mode；任务取消仍使用 agent 的取消按钮。断线会停止会话并保留错误提示，需要手动重开。
+桌面关闭或客户端断开后，coding task 可以继续，但该语音连接不会继续播报。手机仍沿用已有的
+音频采集和播放接口；移动端包和锁屏行为需要单独验证。
+
 ## Nix desktop package
 
 The flake exposes `packages.<system>.desktop` on Linux and macOS:

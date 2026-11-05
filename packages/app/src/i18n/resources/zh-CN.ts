@@ -2323,6 +2323,9 @@ export const zhCN: TranslationResources = {
         info: "语音模式会转写你说的话，并朗读智能体的回复。",
         enabled: "语音模式",
         enabledHint: "免手动与智能体对话",
+        mai: "MAI Voice（预览）",
+        maiHint:
+          "使用托管语音服务与当前智能体对话。请在主机上配置 endpoint 和 GitHub 登录，切换后重新开启语音模式。审批仍使用 Paseo 按钮。",
       },
       openai: {
         apiKey: "API 密钥",

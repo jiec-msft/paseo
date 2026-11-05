@@ -2377,6 +2377,7 @@ export const ptBR: TranslationResources = {
         enabledHint: "Fale na caixa de mensagem em vez de digitar",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "Modo de voz",
         info: "O modo de voz transcreve o que você diz e lê em voz alta as respostas do agente.",
         enabled: "Modo de voz",

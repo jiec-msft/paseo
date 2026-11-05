@@ -144,6 +144,7 @@ const FeatureDictationSchema = z
 const FeatureVoiceModeSchema = z
   .object({
     enabled: z.boolean().optional(),
+    backend: z.enum(["pipeline", "mai"]).optional(),
     llm: z
       .object({
         provider: z.string().optional(),

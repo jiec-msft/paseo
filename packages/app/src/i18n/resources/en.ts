@@ -2473,6 +2473,9 @@ export const en = {
         info: "Voice mode transcribes what you say and reads agent replies aloud.",
         enabled: "Voice mode",
         enabledHint: "Talk with your agents hands-free",
+        mai: "MAI Voice (preview)",
+        maiHint:
+          "Use hosted speech with the current agent. Configure the endpoint and GitHub login on the host. Restart Voice mode after switching. Approvals stay in Paseo.",
       },
       openai: {
         apiKey: "API key",

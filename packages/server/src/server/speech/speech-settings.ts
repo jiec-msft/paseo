@@ -6,7 +6,11 @@ import {
   SpeechTtsConfigSchema,
   type PersistedConfig,
 } from "../persisted-config.js";
-import { resolveRequestedSpeechProviders, resolveSpeechConfig } from "./speech-config-resolver.js";
+import {
+  resolveRequestedSpeechProviders,
+  resolveSpeechConfig,
+  resolveVoiceModeConfig,
+} from "./speech-config-resolver.js";
 import type { SpeechService } from "./speech-runtime.js";
 import { LocalSttModelIdSchema, LocalTtsModelIdSchema } from "./providers/local/models.js";
 
@@ -40,6 +44,7 @@ export function createSpeechSettingsOwner(params: {
 export function readSpeechSettings(persisted: PersistedConfig, env: NodeJS.ProcessEnv): SpeechRead {
   const dictation = persisted.features?.dictation;
   const voiceMode = persisted.features?.voiceMode;
+  const voiceModeConfig = resolveVoiceModeConfig({ persisted, env });
   const providers = resolveRequestedSpeechProviders({ persisted, env });
   const envOverrides: Record<string, string> = {};
   const recordOverride = (path: string, names: string[], fallback?: unknown) => {
@@ -49,6 +54,7 @@ export function readSpeechSettings(persisted: PersistedConfig, env: NodeJS.Proce
   };
   recordOverride("features.dictation.enabled", ["PASEO_DICTATION_ENABLED"]);
   recordOverride("features.voiceMode.enabled", ["PASEO_VOICE_MODE_ENABLED"]);
+  recordOverride("features.voiceMode.backend", ["PASEO_VOICE_BACKEND"]);
   recordOverride("features.voiceMode.turnDetection.provider", [
     "PASEO_VOICE_TURN_DETECTION_PROVIDER",
   ]);
@@ -114,7 +120,9 @@ export function readSpeechSettings(persisted: PersistedConfig, env: NodeJS.Proce
         ),
       },
       voiceMode: {
-        enabled: providers.voiceStt.enabled !== false,
+        enabled: voiceModeConfig.enabled,
+        backend: voiceModeConfig.backend,
+        supportedBackends: ["pipeline", "mai"],
         ...(voiceMode?.llm ? { llm: voiceMode.llm } : {}),
         ...(voiceMode?.turnDetection
           ? {

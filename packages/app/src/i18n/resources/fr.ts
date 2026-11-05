@@ -2393,6 +2393,7 @@ export const fr: TranslationResources = {
         enabledHint: "Parlez dans la zone de message au lieu de taper",
       },
       voiceMode: {
+        ...en.settings.voice.voiceMode,
         title: "Mode vocal",
         info: "Le mode vocal transcrit ce que vous dites et lit à voix haute les réponses de l'agent.",
         enabled: "Mode vocal",

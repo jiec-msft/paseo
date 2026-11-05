@@ -641,6 +641,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     const unsubActivity = client.on("activity_log", (message) => {
       if (message.type !== "activity_log") return;
       notifyVoiceAbortFailure(message.payload, toast.error);
+      if (message.payload.metadata?.voiceSessionFailed === true) {
+        void voiceRuntime?.onSessionFailure(serverId, message.payload.content).catch((error) => {
+          toast.error(error instanceof Error ? error.message : String(error));
+        });
+      }
     });
 
     const unsubTranscription = client.on("transcription_result", (message) => {

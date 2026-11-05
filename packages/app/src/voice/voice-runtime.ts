@@ -38,6 +38,7 @@ export type VoiceRuntimePhase =
   | "stopping";
 
 export interface VoiceRuntimeSnapshot {
+  error: string | null;
   phase: VoiceRuntimePhase;
   isVoiceMode: boolean;
   isVoiceSwitching: boolean;
@@ -123,6 +124,7 @@ interface CueState {
 }
 
 const INITIAL_SNAPSHOT: VoiceRuntimeSnapshot = {
+  error: null,
   phase: "disabled",
   isVoiceMode: false,
   isVoiceSwitching: false,
@@ -141,6 +143,7 @@ let nextVoiceRuntimeInstanceId = 1;
 
 function snapshotsEqual(left: VoiceRuntimeSnapshot, right: VoiceRuntimeSnapshot): boolean {
   return (
+    left.error === right.error &&
     left.phase === right.phase &&
     left.isVoiceMode === right.isVoiceMode &&
     left.isVoiceSwitching === right.isVoiceSwitching &&
@@ -181,6 +184,7 @@ export interface VoiceRuntime {
   onAssistantAudioFinished(serverId: string): void;
   onTranscriptionResult(serverId: string, text: string): void;
   onServerSpeechStateChanged(serverId: string, isSpeaking: boolean): void;
+  onSessionFailure(serverId: string, error: string): Promise<void>;
   onTurnEvent(serverId: string, agentId: string, eventType: TurnEventType): void;
 }
 
@@ -366,13 +370,14 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
 
         group.chunks.delete(group.nextChunkToPlay);
 
-        if (group.shouldPlay && !group.started && group.isVoiceMode) {
+        const hasAudio = nextChunk.source.size > 0;
+        if (hasAudio && group.shouldPlay && !group.started && group.isVoiceMode) {
           group.started = true;
           api.onAssistantAudioStarted(serverId);
         }
 
         try {
-          if (group.shouldPlay) {
+          if (hasAudio && group.shouldPlay) {
             await deps.engine.play(nextChunk.source);
           }
         } catch (error) {
@@ -729,6 +734,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       state.transportReady = false;
       patchSnapshot((prev) => ({
         ...prev,
+        error: null,
         isVoiceSwitching: true,
         phase: "starting",
         activeServerId: serverId,
@@ -776,7 +782,17 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
           await session.adapter.setVoiceMode(false).catch(() => undefined);
         }
         await performLocalStop();
+        patchSnapshot({ error: error instanceof Error ? error.message : String(error) });
         throw error;
+      }
+    },
+
+    async onSessionFailure(serverId, error) {
+      if (state.snapshot.activeServerId !== serverId) return;
+      try {
+        await api.stopVoice();
+      } finally {
+        patchSnapshot({ error });
       }
     },
 

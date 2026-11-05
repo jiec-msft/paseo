@@ -396,23 +396,38 @@ export function createSpeechService(
   });
 
   const computeReadinessSnapshot = (): SpeechReadinessSnapshot => {
-    const realtimeVoice = buildRealtimeVoiceReadiness({
+    let realtimeVoice = buildRealtimeVoiceReadiness({
       providers,
       turnDetectionService,
       sttService,
       ttsService,
     });
+    if (speechConfig?.maiVoice?.enabled) {
+      const available = speechConfig.maiVoice.endpointConfigured;
+      realtimeVoice = {
+        enabled: true,
+        available,
+        reasonCode: available ? "ready" : "stt_unavailable",
+        message: available
+          ? "MAI voice is configured. Connection and authentication are checked on start."
+          : "Set PASEO_MAI_VOICE_URL on the daemon host before starting MAI voice.",
+        retryable: false,
+        missingModelIds: [],
+      };
+    }
     const dictation = buildDictationReadiness({
       providers,
       dictationSttService,
     });
-    const voiceFeature = buildVoiceFeatureReadiness({
+    let voiceFeature = buildVoiceFeatureReadiness({
       realtimeVoice,
       dictation,
       missingLocalModelIds,
       backgroundDownloadInProgress,
       backgroundDownloadError,
     });
+    // Dictation model downloads must not block a hosted voice conversation.
+    if (speechConfig?.maiVoice?.enabled) voiceFeature = realtimeVoice;
     return {
       generatedAt: new Date().toISOString(),
       requiredLocalModelIds: localModelConfig?.defaultModelIds ?? [],
